@@ -3,6 +3,8 @@ dist/
 test-results/
 playwright-report/
 .preflight/
+.vantage/
+__vantage_screenshots__/
 *.log
 .tmp_*
 .DS_Store
