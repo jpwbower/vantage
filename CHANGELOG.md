@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Failed route responses now stop content checks with a route-specific HTTP
+  diagnostic, including raw-response HTML validation, instead of reporting
+  accessibility or markup defects in the server's error page.
+
 - Renamed the tool from Preflight to Vantage before launch: package name,
   CLI binary, config convention, environment variables, generated artifacts,
   docs, templates, CI labels, and public TypeScript identifiers now use

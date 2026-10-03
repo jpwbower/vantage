@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadVantageConfig } from './_helpers.js';
+import { gotoRoute, loadVantageConfig } from './_helpers.js';
 
 const cfg = loadVantageConfig();
 const isVisual = process.env.VANTAGE_VISUAL === '1';
@@ -43,7 +43,7 @@ if (!isVisual) {
           `Visual spec only runs on project "${SUPPORTED_PROJECT}". ` +
             `Set cfg.visualProject to change which engine__viewport project visual regression runs on.`
         );
-        await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+        await gotoRoute(page, route);
         if (cfg.readyMarker) {
           await page.waitForSelector(cfg.readyMarker, {
             state: 'attached',

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { applyNetworkPreset, loadVantageConfig, isCi } from './_helpers.js';
+import { gotoRoute, applyNetworkPreset, loadVantageConfig, isCi } from './_helpers.js';
 
 const cfg = loadVantageConfig();
 
@@ -44,14 +44,7 @@ test.describe('smoke', () => {
 
       await applyNetworkPreset(page, cfg);
 
-      const response = await page.goto(route.path, { waitUntil: 'domcontentloaded' });
-      expect(response, `no response object for ${route.path}`).not.toBeNull();
-      const status = response!.status();
-      expect(
-        status,
-        `${route.path} returned HTTP ${status} (expected 2xx)`
-      ).toBeGreaterThanOrEqual(200);
-      expect(status, `${route.path} returned HTTP ${status} (expected 2xx)`).toBeLessThan(300);
+      await gotoRoute(page, route);
 
       if (cfg.readyMarker) {
         // Wait for the consumer-defined ready selector. We use a generous

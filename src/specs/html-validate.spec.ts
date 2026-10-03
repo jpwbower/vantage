@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadVantageConfig } from './_helpers.js';
+import { assertRouteResponse, gotoRoute, loadVantageConfig } from './_helpers.js';
 
 const cfg = loadVantageConfig();
 const isRelease = process.env.VANTAGE_RELEASE === '1';
@@ -131,7 +131,7 @@ if (!isRelease) {
           return;
         }
 
-        await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+        await gotoRoute(page, route);
         if (cfg.readyMarker) {
           await page.waitForSelector(cfg.readyMarker, {
             state: 'attached',
@@ -160,12 +160,13 @@ if (!isRelease) {
           // html-validate would see if a browser navigated here. We
           // deliberately do not forward storageState cookies; on an
           // authenticated route this surfaces the unauthenticated
-          // response body (login flow markup, 401, etc.) which IS the
+          // successful response body (such as login markup), which IS the
           // useful signal — see cfg.htmlValidateRaw JSDoc.
           const url = joinUrl(cfg.baseURL, route.path);
           let bodyText: string;
           try {
             const res = await fetch(url);
+            assertRouteResponse(route, res.status, 'html-validate (raw response)');
             bodyText = await res.text();
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
