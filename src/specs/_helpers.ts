@@ -1,9 +1,32 @@
-import type { Page } from '@playwright/test';
+import { test, type Page, type Response } from '@playwright/test';
+import path from 'node:path';
 import type {
   VantageNetworkPreset,
   VantageNetworkPresetCustom,
   ResolvedVantageConfig,
+  VantageRoute,
 } from '../types.js';
+
+/** Refuse content verdicts when the final document response is not 2xx. */
+export function assertRouteResponse(
+  route: VantageRoute,
+  status: number | null,
+  spec: string
+): void {
+  if (status === null || status < 200 || status >= 300) {
+    throw new Error(
+      `route ${route.name} (${route.path}) returned HTTP ${status ?? 'no response'} — ` +
+        `the page did not render, so no ${spec} verdict was taken; check the web server log`
+    );
+  }
+}
+
+export async function gotoRoute(page: Page, route: VantageRoute): Promise<Response> {
+  const response = await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+  const spec = path.basename(test.info().file).replace(/\.spec\.[jt]s$/, '');
+  assertRouteResponse(route, response?.status() ?? null, spec);
+  return response!;
+}
 
 interface SerialisedRegExp {
   source: string;

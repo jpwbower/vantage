@@ -120,6 +120,9 @@ jobs:
         working-directory: _ci_scratch
         run: npx vantage --smoke --ci
 
+      - name: Reject failed routes before content verdicts
+        run: npm run test:route-failure
+
       - name: Validate gate-inert backstops + determinism
         # Runs the adversarial gate-inert harness — proves --gate rejects every
         # executable / suppression config surface (and that the rejected modules

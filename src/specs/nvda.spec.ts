@@ -1,7 +1,7 @@
 import { test as plainTest } from '@playwright/test';
 import { writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { loadVantageConfig } from './_helpers.js';
+import { gotoRoute, loadVantageConfig } from './_helpers.js';
 
 const cfg = loadVantageConfig();
 const isRelease = process.env.VANTAGE_RELEASE === '1';
@@ -83,7 +83,7 @@ if (!isRelease) {
         const allAnnouncements: { route: string; phrases: string[] }[] = [];
 
         for (const route of cfg.routes) {
-          await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+          await gotoRoute(page, route);
           if (cfg.readyMarker) {
             await page.waitForSelector(cfg.readyMarker, {
               state: 'attached',

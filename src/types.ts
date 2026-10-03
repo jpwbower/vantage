@@ -252,8 +252,9 @@ export interface VantageConfig {
    * Auth interaction — by design: the raw fetch does NOT forward
    * `cfg.auth` storageState cookies (they live in the browser context,
    * not in Node `fetch`). If a route requires auth, the raw fetch
-   * receives the unauthenticated response (login page, 401, etc.) —
-   * which IS the signal. Surfacing the login flow's markup is exactly
+   * receives the unauthenticated response. A 2xx login page is validated;
+   * a non-2xx response (such as 401) fails as a route failure before any
+   * markup verdict. Surfacing the login flow's markup is exactly
    * what makes raw-response useful for authenticated routes, since
    * post-hydration validation never reaches the unauthenticated first
    * paint. Do not file as a bug.

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import type { Result } from 'axe-core';
-import { loadVantageConfig } from './_helpers.js';
+import { gotoRoute, loadVantageConfig } from './_helpers.js';
 
 const cfg = loadVantageConfig();
 const route = cfg.routes[0]!;
@@ -13,7 +13,7 @@ test.describe('emulated media', () => {
   test.skip(isSmoke, '--smoke runs only the smoke + a11y specs');
   test(`prefers-reduced-motion: reduce on ${route.name}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+    await gotoRoute(page, route);
     if (cfg.readyMarker) await page.waitForSelector(cfg.readyMarker, { state: 'attached', timeout: 30_000 });
     const matches = await page.evaluate(
       () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -24,7 +24,7 @@ test.describe('emulated media', () => {
   for (const scheme of ['dark', 'light'] as const) {
     test(`prefers-color-scheme: ${scheme} on ${route.name}`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
-      await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+      await gotoRoute(page, route);
       if (cfg.readyMarker) await page.waitForSelector(cfg.readyMarker, { state: 'attached', timeout: 30_000 });
       const matches = await page.evaluate(
         (s) => window.matchMedia(`(prefers-color-scheme: ${s})`).matches,
@@ -51,7 +51,7 @@ test.describe('emulated media', () => {
       'WebKit prefers-contrast emulation is unreliable — see playwright issue #28728'
     );
     await page.emulateMedia({ contrast: 'more' });
-    await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+    await gotoRoute(page, route);
     if (cfg.readyMarker) await page.waitForSelector(cfg.readyMarker, { state: 'attached', timeout: 30_000 });
     const matches = await page.evaluate(
       () => window.matchMedia('(prefers-contrast: more)').matches
@@ -65,7 +65,7 @@ test.describe('emulated media', () => {
       'forced-colors emulation is Chromium-only — see playwright issue #33765'
     );
     await page.emulateMedia({ forcedColors: 'active' });
-    await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+    await gotoRoute(page, route);
     if (cfg.readyMarker) await page.waitForSelector(cfg.readyMarker, { state: 'attached', timeout: 30_000 });
     const matches = await page.evaluate(
       () => window.matchMedia('(forced-colors: active)').matches
@@ -84,7 +84,7 @@ test.describe('emulated media', () => {
 
   test(`print stylesheet on ${route.name}`, async ({ page }, testInfo) => {
     await page.emulateMedia({ media: 'print' });
-    await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+    await gotoRoute(page, route);
     if (cfg.readyMarker) await page.waitForSelector(cfg.readyMarker, { state: 'attached', timeout: 30_000 });
 
     // Capture a screenshot under print media for visual diff in the report.

@@ -355,8 +355,9 @@ These are the rough edges to know about before you wire vantage into CI.
   **Auth interaction — by design.** The raw fetch does NOT forward
   `cfg.auth` storageState cookies (they live in the browser context,
   not Node `fetch`). For authenticated routes, the raw pass receives the
-  unauthenticated response (login page, 401, etc.) — which IS the useful
-  signal, because the post-hydration pass never sees the SSR markup
+  unauthenticated response. A 2xx login page is validated; non-2xx
+  responses (such as 401) fail as route failures before a markup verdict.
+  This is useful because the post-hydration pass never sees the SSR markup
   served before the redirect. Do not file as a bug; that's the whole
   point of having a separate raw-response pass for authenticated routes.
 

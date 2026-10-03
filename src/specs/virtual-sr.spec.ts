@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadVantageConfig } from './_helpers.js';
+import { gotoRoute, loadVantageConfig } from './_helpers.js';
 
 const cfg = loadVantageConfig();
 const route = cfg.routes[0]!;
@@ -27,7 +27,7 @@ const isSmoke = process.env.VANTAGE_SMOKE === '1';
 test.describe('a11y tree walk (virtual screen reader equivalent)', () => {
   test.skip(isSmoke, '--smoke runs only the smoke + a11y specs');
   test(`accessible-name sweep on ${route.name}`, async ({ page }) => {
-    await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+    await gotoRoute(page, route);
     if (cfg.readyMarker) await page.waitForSelector(cfg.readyMarker, { state: 'attached', timeout: 30_000 });
 
     await page.waitForTimeout(250);

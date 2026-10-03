@@ -1,5 +1,5 @@
 import { test, chromium } from '@playwright/test';
-import { loadVantageConfig } from './_helpers.js';
+import { gotoRoute, loadVantageConfig } from './_helpers.js';
 import type { ResolvedVantageConfig } from '../types.js';
 
 const cfg = loadVantageConfig();
@@ -146,7 +146,7 @@ if (!isRelease) {
             timezoneId: cfg.timezoneId,
             ...(storageStatePath ? { storageState: storageStatePath } : {}),
           });
-          await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+          await gotoRoute(page, route);
           if (cfg.readyMarker) {
             await page.waitForSelector(cfg.readyMarker, {
               state: 'attached',

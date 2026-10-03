@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadVantageConfig } from './_helpers.js';
+import { gotoRoute, loadVantageConfig } from './_helpers.js';
 
 const cfg = loadVantageConfig();
 const isSmoke = process.env.VANTAGE_SMOKE === '1';
@@ -19,7 +19,7 @@ const representativeRoute = cfg.routes[0]!;
 test.describe('keyboard', () => {
   test.skip(isSmoke, '--smoke runs only the smoke + a11y specs');
   test(`tab walk on ${representativeRoute.name}`, async ({ page, browserName }) => {
-    await page.goto(representativeRoute.path, { waitUntil: 'domcontentloaded' });
+    await gotoRoute(page, representativeRoute);
     if (cfg.readyMarker) {
       await page.waitForSelector(cfg.readyMarker, { state: 'attached', timeout: 30_000 });
     }
