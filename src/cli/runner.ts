@@ -258,7 +258,9 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[vantage] child-bound readiness: ${message}\n`);
-    return { exitCode: 4 };
+    // Readiness refusals are EnvError-class: 3 = environment error per the
+    // README exit table and bin's EXIT mapping (4 stays runtime/hang).
+    return { exitCode: 3 };
   } finally {
     await ownedServer?.stop();
   }

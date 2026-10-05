@@ -59,6 +59,7 @@ for (const [name, mode, foreign] of [
   ['S1', 'on-busy', true],
   ['S2', 'relocate', false],
   ['S3', 'honest', false],
+  ['S4', 'foreign-then-relocate', false],
 ]) {
   const { port, first, second } = await reservePorts();
   let server;
@@ -71,7 +72,7 @@ for (const [name, mode, foreign] of [
     await close(second);
     const child = spawn(process.execPath, [
       'bin/vantage.mjs', '--config', 'ci/vantage.child-bound.config.ts',
-      '--smoke', ...(name === 'S2' ? ['--no-reuse'] : ['--ci']),
+      '--smoke', ...(name === 'S2' || name === 'S4' ? ['--no-reuse'] : ['--ci']),
     ], {
       env: {
         ...process.env,
@@ -101,18 +102,18 @@ for (const [name, mode, foreign] of [
       assert.notEqual(code, 0, `${name}: foreign/relocated server must be RED`);
       assert.match(output, /\[vantage\] child-bound readiness:/, `${name}: refusal must name child-bound cause`);
       if (name === 'S1') assert.match(output, /configured port already served by a foreign process/);
-      if (name === 'S2') {
+      if (name === 'S2' || name === 'S4') {
         assert.match(output, /timeout/);
         assert.match(output, new RegExp(`observed port\\(s\\): ${port + 1}`));
       }
+      // S4 is the card's composed case: the silent configured-port listener
+      // must die with the child too, or a stale server survives the run.
+      if (name === 'S4') {
+        assert.equal(await portIsFree(port), true, 'S4: silent configured-port listener must be killed');
+      }
     }
-    // Cleanup proof: probe only the port this scenario's child actually bound.
-    // S1 never spawns a child (the exclusivity pre-check refuses first) and S3's
-    // child binds the configured port (asserted above); only S2's relocated
-    // child binds port+1. Vacuous port+1 probes also flake on Windows
-    // excluded port ranges.
-    if (name === 'S2') {
-      assert.equal(await portIsFree(port + 1), true, 'S2: relocated child must be killed');
+    if (name === 'S2' || name === 'S4') {
+      assert.equal(await portIsFree(port + 1), true, `${name}: relocated child must be killed`);
     }
     console.log(`${name}: PASS (${name === 'S3' ? 'GREEN, child cleaned up' : 'RED, child-bound cause'})`);
   } catch (err) {
