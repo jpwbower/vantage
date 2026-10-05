@@ -35,14 +35,22 @@ async function reservePorts() {
 }
 
 async function portIsFree(port) {
-  const probe = net.createServer();
-  try {
-    await listen(probe, port);
-    await close(probe);
-    return true;
-  } catch (err) {
-    if (err.code === 'EADDRINUSE') return false;
-    throw err;
+  // A probe bind can hit a Windows excluded port range (EACCES/EPERM with no
+  // listener); retry so the cleanup assertion fails only on a real listener.
+  for (let attempt = 0; ; attempt++) {
+    const probe = net.createServer();
+    try {
+      await listen(probe, port);
+      await close(probe);
+      return true;
+    } catch (err) {
+      if (err.code === 'EADDRINUSE') return false;
+      if ((err.code === 'EACCES' || err.code === 'EPERM') && attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        continue;
+      }
+      throw err;
+    }
   }
 }
 
@@ -98,7 +106,14 @@ for (const [name, mode, foreign] of [
         assert.match(output, new RegExp(`observed port\\(s\\): ${port + 1}`));
       }
     }
-    assert.equal(await portIsFree(port + 1), true, `${name}: relocated child must be killed`);
+    // Cleanup proof: probe only the port this scenario's child actually bound.
+    // S1 never spawns a child (the exclusivity pre-check refuses first) and S3's
+    // child binds the configured port (asserted above); only S2's relocated
+    // child binds port+1. Vacuous port+1 probes also flake on Windows
+    // excluded port ranges.
+    if (name === 'S2') {
+      assert.equal(await portIsFree(port + 1), true, 'S2: relocated child must be killed');
+    }
     console.log(`${name}: PASS (${name === 'S3' ? 'GREEN, child cleaned up' : 'RED, child-bound cause'})`);
   } catch (err) {
     failures++;
