@@ -36,6 +36,7 @@
     "test": "node ci/exports-resolution-check.mjs && npm exec -- vantage --config ci/vantage.smoke.config.ts --smoke --ci",
     "test:exports": "node ci/exports-resolution-check.mjs",
     "test:route-failure": "node scripts/test-route-failure.mjs",
+    "test:child-bound-readiness": "node scripts/test-child-bound-readiness.mjs",
     "validate:gate-inert": "npm run build && node ci/gate-inert-validation.mjs"
   },
   "peerDependencies": {

@@ -313,7 +313,8 @@ const config: PlaywrightTestConfig = defineConfig({
           cwd: cfg.webServer.cwd,
           timeout: cfg.webServer.timeout ?? 120_000,
           env: cfg.webServer.env,
-          reuseExistingServer: !isCi && process.env.VANTAGE_NO_REUSE !== '1',
+          reuseExistingServer: process.env.VANTAGE_OWNED_WEB_SERVER === '1' ||
+            (!isCi && process.env.VANTAGE_NO_REUSE !== '1'),
           stdout: 'pipe',
           stderr: 'pipe',
         },

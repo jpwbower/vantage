@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `--no-reuse` and `--ci` now use runner-owned webServer launch and child-bound
+  readiness: refuse a foreign listener, reject child exit before readiness,
+  and prevent an advertised relocated port from satisfying the configured URL.
+  The command's process tree is cleaned up after the run. Silent-command
+  degradation and the accepted post-GREEN race are documented in README.
+
 - Failed route responses now stop content checks with a route-specific HTTP
   diagnostic, including raw-response HTML validation, instead of reporting
   accessibility or markup defects in the server's error page.

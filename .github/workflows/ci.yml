@@ -125,6 +125,9 @@ jobs:
           npx playwright install chromium
           npm run test:route-failure
 
+      - name: Reject foreign servers and relocated children
+        run: npm run test:child-bound-readiness
+
       - name: Validate gate-inert backstops + determinism
         # Runs the adversarial gate-inert harness — proves --gate rejects every
         # executable / suppression config surface (and that the rejected modules

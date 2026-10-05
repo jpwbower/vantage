@@ -1,4 +1,7 @@
 import { spawn } from 'node:child_process';
+import net from 'node:net';
+import http from 'node:http';
+import https from 'node:https';
 import { mkdir, writeFile, readFile, rm, symlink, stat, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -10,6 +13,7 @@ import type {
   EngineName,
   ViewportName,
   VantageAuth,
+  VantageWebServer,
 } from '../types.js';
 import { ALL_VIEWPORTS } from '../viewports.js';
 import { DEFAULT_CONSOLE_IGNORE } from '../console-ignore-defaults.js';
@@ -205,6 +209,8 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     VANTAGE_TEST_RESULTS_DIR: testResultsDir,
     VANTAGE_CI: args.ci ? '1' : '0',
     VANTAGE_NO_REUSE: args.noReuse ? '1' : '0',
+    // Never inherit a handoff claim from a previous/outer runner.
+    VANTAGE_OWNED_WEB_SERVER: '0',
     VANTAGE_VERBOSE: args.verbose ? '1' : '0',
     VANTAGE_SMOKE: args.smoke ? '1' : '0',
     VANTAGE_RELEASE: args.release ? '1' : '0',
@@ -232,13 +238,31 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     process.stderr.write(`[vantage] launching: node ${cliArgs.map((a) => quote(a)).join(' ')}\n`);
   }
 
-  const { exitCode, hangDetected } = await runPlaywright(
-    cliArgs,
-    env,
-    consumerCwd,
-    killAfterMs,
-    args.verbose
-  );
+  let ownedServer: ReturnType<typeof launchOwnedWebServer> | undefined;
+  let playwrightResult: PlaywrightRunResult;
+  try {
+    if (!args.gate && resolvedWebServer !== false && (args.ci || args.noReuse)) {
+      const url = webServerUrl(resolvedWebServer);
+      await requireFreeWebServerPort(url);
+      ownedServer = launchOwnedWebServer(resolvedWebServer, url, env);
+      await ownedServer.ready;
+      env.VANTAGE_OWNED_WEB_SERVER = '1';
+    }
+    playwrightResult = await runPlaywright(
+      cliArgs,
+      env,
+      consumerCwd,
+      killAfterMs,
+      args.verbose
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[vantage] child-bound readiness: ${message}\n`);
+    return { exitCode: 4 };
+  } finally {
+    await ownedServer?.stop();
+  }
+  const { exitCode, hangDetected } = playwrightResult;
 
   const totals = await tallyResults(jsonFile);
   const cadence: SummaryJson['cadence'] = args.visual
@@ -292,6 +316,156 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   await linkOrRedirect(lastRunDir, htmlReportDir);
 
   return { exitCode: finalExitCode };
+}
+
+function webServerUrl(config: VantageWebServer): URL {
+  const url = new URL(config.url ?? `http://localhost:${config.port}`);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new EnvError('webServer readiness requires an HTTP(S) URL');
+  }
+  return url;
+}
+
+async function requireFreeWebServerPort(url: URL): Promise<void> {
+  const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  await new Promise<void>((resolve, reject) => {
+    const socket = net.createConnection({ host, port });
+    const finish = (error?: Error) => {
+      socket.destroy();
+      if (error) reject(error);
+      else resolve();
+    };
+    socket.once('connect', () => finish(new EnvError(
+      `configured port already served by a foreign process (${host}:${port}); stop it before --no-reuse/--ci`
+    )));
+    socket.once('error', (error: NodeJS.ErrnoException) => {
+      finish(error.code === 'ECONNREFUSED' ? undefined : new EnvError(
+        `cannot establish configured port exclusivity (${host}:${port}): ${error.message}`
+      ));
+    });
+    socket.setTimeout(1_000, () => finish(new EnvError(
+      `configured port exclusivity probe timed out (${host}:${port})`
+    )));
+  });
+}
+
+/** Runner owns readiness and the entire shell command's process tree. */
+function launchOwnedWebServer(config: VantageWebServer, url: URL, env: NodeJS.ProcessEnv) {
+  const child = spawn(config.command, {
+    cwd: config.cwd,
+    env: { ...env, ...config.env },
+    shell: true,
+    detached: process.platform !== 'win32',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
+  const observedPorts = new Set<number>();
+  let alive = true;
+  let settled = false;
+  let healthy = false;
+  let request: http.ClientRequest | undefined;
+  let pollTimer: NodeJS.Timeout | undefined;
+  let deadlineTimer: NodeJS.Timeout;
+  let resolveReady: () => void;
+  let rejectReady: (error: Error) => void;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  const finish = (error?: Error) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(deadlineTimer);
+    if (pollTimer) clearTimeout(pollTimer);
+    request?.destroy();
+    if (error) rejectReady(error);
+    else {
+      process.stderr.write('[vantage] child-bound readiness: GREEN (launched child alive)\n');
+      resolveReady();
+    }
+  };
+  child.once('error', (err) => {
+    alive = false;
+    finish(new EnvError(`webServer spawn failed: ${err.message}`));
+  });
+  child.once('exit', (code, signal) => {
+    alive = false;
+    finish(new EnvError(`webServer child exited before readiness (code=${code}, signal=${signal})`));
+  });
+  const observe = (stream: NodeJS.ReadableStream, destination: NodeJS.WriteStream) => {
+    let pending = '';
+    stream.on('data', (chunk: Buffer) => {
+      destination.write(chunk);
+      pending += chunk.toString('utf8').replace(/\x1b\[[0-9;]*m/g, '');
+      const lines = pending.split(/\r?\n/);
+      pending = lines.pop()!.slice(-8_192);
+      for (const line of lines) {
+        for (const match of line.matchAll(/https?:\/\/(?:\[[^\]]+\]|[^\s/:]+):([0-9]+)(?=[/\s]|$)/g)) {
+          observedPorts.add(Number(match[1]));
+        }
+      }
+    });
+  };
+  observe(child.stdout, process.stdout);
+  observe(child.stderr, process.stderr);
+
+  const poll = () => {
+    if (settled) return;
+    // A relocated address permanently disables the no-output fallback.
+    if (observedPorts.size > 0 && !observedPorts.has(port)) {
+      healthy = false;
+      pollTimer = setTimeout(poll, 100);
+      return;
+    }
+    const transport = url.protocol === 'https:' ? https : http;
+    request = transport.get(url, (response) => {
+      response.resume();
+      healthy = (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 404;
+      if (healthy && alive && observedPorts.has(port)) finish();
+      else if (!settled) pollTimer = setTimeout(poll, 100);
+    });
+    request.setTimeout(1_000, () => request?.destroy());
+    request.once('error', () => {
+      healthy = false;
+      if (!settled) pollTimer = setTimeout(poll, 100);
+    });
+  };
+  deadlineTimer = setTimeout(() => {
+    // Wait out the observation window before declaring a command silent:
+    // a later relocated-address line must never lose a race to an early poll.
+    if (alive && healthy && observedPorts.size === 0) finish();
+    else finish(new EnvError(
+      `webServer readiness timeout (${config.timeout ?? 120_000}ms); configured port ${port}; ` +
+      `observed port(s): ${[...observedPorts].join(', ') || 'none'}`
+    ));
+  }, config.timeout ?? 120_000);
+  poll();
+
+  const stop = async () => {
+    if (!settled) finish(new EnvError('webServer readiness cancelled'));
+    if (!child.pid) return;
+    if (process.platform === 'win32') {
+      // child.kill() kills cmd.exe alone on Windows, orphaning npm/dev servers.
+      await new Promise<void>((resolve) => {
+        const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        killer.once('error', () => { child.kill('SIGKILL'); resolve(); });
+        killer.once('exit', () => resolve());
+      });
+    } else {
+      const killGroup = (signal: NodeJS.Signals) => {
+        try { process.kill(-child.pid!, signal); }
+        catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
+        }
+      };
+      killGroup('SIGTERM');
+      // Keep escalation even if the shell exits before a stubborn descendant.
+      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      killGroup('SIGKILL');
+    }
+  };
+  return { ready, stop };
 }
 
 function applyRunFlagsToConfig(
