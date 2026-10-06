@@ -151,10 +151,32 @@ vantage --verbose             verbose progress logs
 vantage --update-snapshots    Playwright snapshot update passthrough
 vantage --reporter=<name>     line | list | html | json | junit
 vantage --config=<path>       override config discovery
-vantage --ci                  strict defaults: html + junit reporters, fail on warnings, no reuseExistingServer
-vantage --no-reuse            force a fresh webServer launch (debug stuck server)
+vantage --ci                  strict defaults: html + junit reporters, fail on warnings, runner-owned fresh server
+vantage --no-reuse            require an exclusive port and a fresh runner-owned webServer
 vantage --no-auth             skip cfg.auth.setup even if configured
 ```
+
+With `--no-reuse` or `--ci`, the runner first probes the configured webServer
+host/port. An existing listener is refused with a `child-bound readiness`
+diagnostic naming the foreign process cause. The runner then launches the
+configured command, watches both output streams for HTTP(S) bound-address
+lines, and requires the configured port plus a healthy URL response while
+the child is alive. A child advertising only a relocated port times out RED;
+any child exit before readiness is immediately RED. The readiness window is
+`webServer.timeout` (default 120 seconds). After readiness, Playwright adopts
+the running server with `reuseExistingServer: true`; the runner kills the
+command's process tree when Playwright finishes, including on failure.
+Default reuse mode continues to use Playwright's launch and URL polling.
+`webServer: false` and `--gate` do not enter this launch path.
+
+Two limits remain. Commands that print no recognizable bound-address line
+degrade to URL health plus child-alive and the pre-launch exclusivity check.
+The runner waits until the readiness deadline before choosing this fallback,
+so a late relocated-address line cannot lose a race to an early URL response;
+this is weaker ownership evidence than the stdio port gate. Also, if the
+gated child dies after GREEN and a foreign server binds the port before
+Playwright's reuse pre-check, Playwright could adopt that foreign server.
+This narrow post-GREEN race is accepted.
 
 ### Cadence
 
@@ -613,7 +635,7 @@ These are the rough edges to know about before you wire vantage into CI.
 
 - **ClearType subpixel font hinting on Windows** can drift between minor Windows updates. If you enable visual regression in v0.2, expect baseline flake — set `fontHinting: 'none'` or accept tolerance.
 
-- **`webServer` port conflicts.** vantage launches your dev server via Playwright's webServer config. If a previous run left a dead server bound to the port, pass `--no-reuse` to force a fresh launch.
+- **`webServer` port conflicts.** `--no-reuse` and `--ci` refuse an existing listener. Stop the previous server before retrying; these flags require an exclusive port for the runner's fresh child.
 
 - **Console-error capture is noisy out of the box.** vantage ships a default ignore-list (analytics beacons blocked by adblockers, framework deprecation warnings, browser-extension chatter). Extend it via `consoleIgnore: [...]` in your config. The consumer list is **concatenated** with the defaults, never replaces them.
 
