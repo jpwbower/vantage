@@ -19,12 +19,14 @@ export interface ViewportProfile {
  * and small-screen breakpoint coverage matters for responsive design.
  */
 export function buildViewportProfiles(): Record<ViewportName, ViewportProfile> {
-  const iPhone13 = devices['iPhone 13'];
+  // mobile-375 is a 375-CSS-px profile, so it must come from a 375-wide
+  // descriptor; iPhone 13 is 390 wide.
+  const iPhone13Mini = devices['iPhone 13 Mini'];
   const iPadGen7 = devices['iPad (gen 7)'];
 
-  if (!iPhone13 || !iPadGen7) {
+  if (!iPhone13Mini || !iPadGen7) {
     throw new Error(
-      'vantage: Playwright `devices` is missing iPhone 13 or iPad (gen 7). ' +
+      'vantage: Playwright `devices` is missing iPhone 13 Mini or iPad (gen 7). ' +
         'Upgrade @playwright/test to >=1.50.0.'
     );
   }
@@ -43,11 +45,11 @@ export function buildViewportProfiles(): Record<ViewportName, ViewportProfile> {
     },
     'mobile-375': {
       name: 'mobile-375',
-      viewport: iPhone13.viewport,
-      deviceScaleFactor: iPhone13.deviceScaleFactor,
-      isMobile: iPhone13.isMobile,
-      hasTouch: iPhone13.hasTouch,
-      userAgent: iPhone13.userAgent,
+      viewport: iPhone13Mini.viewport,
+      deviceScaleFactor: iPhone13Mini.deviceScaleFactor,
+      isMobile: iPhone13Mini.isMobile,
+      hasTouch: iPhone13Mini.hasTouch,
+      userAgent: iPhone13Mini.userAgent,
     },
     'tablet-768': {
       name: 'tablet-768',
