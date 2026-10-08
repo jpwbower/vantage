@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The `mobile-375` viewport profile now renders 375 CSS px wide. It used the
+  iPhone 13 descriptor (390 px); it now uses iPhone 13 Mini (375 px viewport,
+  375x812 screen, DPR 3). Consumer `mobile-375` visual baselines need
+  re-capturing.
+
 ### Changed
 
 - `--no-reuse` and `--ci` now use runner-owned webServer launch and child-bound
